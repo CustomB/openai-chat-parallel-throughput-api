@@ -4,7 +4,7 @@ import json
 
 BASE_URL = "http://localhost:8088"
 
-total_requests = 60
+total_requests = 100
 
 request_dict = {
     "model": "gpt-3.5-turbo",
@@ -22,13 +22,16 @@ for _ in range(total_requests):
     response_data = response.json()
     task_ids.append(response_data['task_id'])
 
-for task_id in task_ids:
-    while True:
+while task_ids:
+    for task_id in task_ids:
         response = requests.get(f"{BASE_URL}/task/{task_id}")
         response_data = response.json()
         if response_data['status'] == 'ready':
+            print(response_data["result"].replace("\n", ""))
+            task_ids.remove(task_id)
             break
-        time.sleep(0.5)  # Wait for 0.5 seconds before checking again
+        time.sleep(0.001)  # Wait for 0.5 seconds before checking again
+    # print(len(task_ids))
 
 end_time = time.time()
 
