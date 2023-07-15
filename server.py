@@ -20,7 +20,6 @@ DELAY_BETWEEN_REQUESTS = 0.03
 
 app = FastAPI()
 queue = asyncio.Queue()
-
 results = {}
 
 
@@ -66,9 +65,16 @@ async def process_request(request: Dict, task_id: str, max_waiting_time: float, 
         queue.put_nowait({"item": Item(request=request), "task_id": task_id})
         
 
+def task_id_generator_function():
+    task_id = 0
+    while True:
+        yield task_id
+        task_id += 1
+
+
 @app.post("/task/")
 async def create_task(item: Item):
-    task_id = str(uuid.uuid4())
+    task_id = task_id_generator_function()
     queue.put_nowait({"item": item, "task_id": task_id})
     return {"task_id": task_id}
 
