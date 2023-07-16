@@ -5,6 +5,7 @@ import openai
 import os
 from typing import Dict
 from datetime import datetime
+import numpy as np
 from dotenv import load_dotenv
 import uuid
 
@@ -14,12 +15,12 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 MAX_TOKENS_PER_MINUTE = 12 * 10**4
-MAX_TOKENS_PER_REQUEST = 50
-# DELAY_BETWEEN_REQUESTS = 60.0 / (MAX_TOKENS_PER_MINUTE / MAX_TOKENS_PER_REQUEST)
-DELAY_BETWEEN_REQUESTS = 0.03
+MAX_TOKENS_PER_REQUEST = 400
+DELAY_BETWEEN_REQUESTS = 60.0 / (MAX_TOKENS_PER_MINUTE / MAX_TOKENS_PER_REQUEST)
 
 app = FastAPI()
 queue = asyncio.Queue()
+counter = 0
 results = {}
 
 
@@ -35,7 +36,10 @@ class ApiKeysManager:
         self.api_keys = [ApiKey(key) for key in api_keys]
 
     def get_next_key(self):
-        return min([api_key for api_key in self.api_keys if not api_key.has_ratelimit_error], key=lambda k: k.last_request_time)
+        non_blocked_keys = [api_key for api_key in self.api_keys if not api_key.has_ratelimit_error]
+        if non_blocked_keys:
+            return min(non_blocked_keys, key=lambda k: k.last_request_time)
+        return min(self.api_keys, key=lambda k: k.last_request_time)
         
 
 api_keys_string = os.getenv("OPENAI_API_KEYS")
@@ -74,7 +78,9 @@ def task_id_generator_function():
 
 @app.post("/task/")
 async def create_task(item: Item):
-    task_id = task_id_generator_function()
+    global counter
+    task_id = f"{counter}-{str(uuid.uuid4())}" 
+    counter += 1
     queue.put_nowait({"item": item, "task_id": task_id})
     return {"task_id": task_id}
 
@@ -93,8 +99,6 @@ async def startup_event():
 
 
 async def worker():
-    global last_request_time, has_ratelimit_error
-
     while True:
         print(DELAY_BETWEEN_REQUESTS)
         api_key = api_keys_manager.get_next_key()
@@ -103,7 +107,7 @@ async def worker():
         wait = max(DELAY_BETWEEN_REQUESTS - (datetime.now() - api_key.last_request_time).total_seconds(), 0)
         while api_key.has_ratelimit_error or wait:
             if api_key.has_ratelimit_error:
-                await asyncio.sleep(3)
+                await asyncio.sleep(2)
                 api_key.has_ratelimit_error = False
             await asyncio.sleep(wait)
             wait = max(DELAY_BETWEEN_REQUESTS - (datetime.now() - api_key.last_request_time).total_seconds(), 0)

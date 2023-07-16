@@ -4,7 +4,7 @@ import numpy as np
 
 BASE_URL = "http://localhost:8088"
 
-total_requests = 3000
+total_requests = 1000
 
 
 prompts = [
